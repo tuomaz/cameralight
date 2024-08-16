@@ -13,3 +13,5 @@ def create_mqtt_client():
     client.on_message = on_message
     return client
 
+def send_message(client, topic, value):
+    client.publish(topic, value)
