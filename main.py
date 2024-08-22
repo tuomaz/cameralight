@@ -46,7 +46,7 @@ def run_service():
             cursor.execute("INSERT INTO history (ts, value) VALUES (?, ?)", (current_timestamp, avg))
             conn.commit()
             delayed_ts = int(time.time()) - (23 * 60 * 60)
-            cursor.execute("SELECT value FROM history WHERE ts < ? ORDER BY ts ASC LIMIT 1", (delayed_ts,))
+            cursor.execute("SELECT value FROM history WHERE ts < ? ORDER BY ts DESC LIMIT 1", (delayed_ts,))
             row = cursor.fetchone()
             if row:
                 send_message(client, config['mqtt']['topic'] + "_delayed", round(row[0], 2), logging)
