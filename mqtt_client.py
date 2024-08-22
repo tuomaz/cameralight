@@ -13,5 +13,6 @@ def create_mqtt_client():
     client.on_message = on_message
     return client
 
-def send_message(client, topic, value):
+def send_message(client, topic, value, logging):
+    logging.info(f"Sending MQTT message: value={topic}, topic={value}")
     client.publish(topic, value)

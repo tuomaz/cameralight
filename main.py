@@ -21,7 +21,7 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS history (ts INTEGER, value REAL)'''
 def handle(uri):
     image_bytes = fetch(uri)
     value = process(image_bytes)
-    logger.debug(f"Got value is {value} from {uri}")
+    logger.debug(f"Got value {value} from {uri}")
     return value
 
 def run_service():
@@ -49,8 +49,8 @@ def run_service():
             cursor.execute("SELECT value FROM history WHERE ts < ? ORDER BY ts ASC LIMIT 1", (delayed_ts,))
             row = cursor.fetchone()
             if row:
-                send_message(client, config['mqtt']['topic'] + "_delayed", round(row[0], 2))
-            send_message(client, config['mqtt']['topic'], avg)
+                send_message(client, config['mqtt']['topic'] + "_delayed", round(row[0], 2), logging)
+            send_message(client, config['mqtt']['topic'], avg, logging)
             time.sleep(interval)
     except KeyboardInterrupt:
         logger.warning("Service interrupted by KeyboardInterrupt")
