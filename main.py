@@ -45,7 +45,7 @@ def run_service():
             current_timestamp = int(time.time())
             cursor.execute("INSERT INTO history (ts, value) VALUES (?, ?)", (current_timestamp, avg))
             conn.commit()
-            delayed_ts = int(time.time()) - (23 * 60 * 60)
+            delayed_ts = int(time.time()) - (22.5 * 60 * 60)
             cursor.execute("SELECT value FROM history WHERE ts < ? ORDER BY ts DESC LIMIT 1", (delayed_ts,))
             row = cursor.fetchone()
             if row:
