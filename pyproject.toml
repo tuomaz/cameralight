@@ -1,0 +1,49 @@
+[project]
+name = "cameralight"
+version = "0.1.0"
+description = "A Python application that fetches images, calculates their brightness, and sends the data to an MQTT broker."
+authors = [
+    {name = "Fredrik Tuomas"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy (>=1.23.5,<2.0.0)",
+    "paho-mqtt (>=1.5.1,<2.0.0)",
+    "pyyaml (>=6.0.2,<7.0.0)",
+    "requests (>=2.32.2,<3.0.0)",
+    "opencv-python (>=4.10.0.84,<5.0.0.0)",
+    "pillow (>=10.4.0,<11.0.0)",
+    "pydantic (>=2.0,<3.0)",
+    "pydantic-settings (>=2.0,<3.0)"
+]
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.1.0,<0.2.0)",
+    "mypy (>=1.0,<2.0)",
+    "types-pyyaml (>=6.0,<7.0)",
+    "types-requests (>=2.31,<3.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

@@ -1,8 +1,10 @@
 import signal
 import sys
+from typing import Any
 
-def setup_signal_handlers(client):
-    def signal_handler(sig, frame):
+
+def setup_signal_handlers(client: Any) -> None:
+    def signal_handler(sig: int, frame: Any) -> None:
         print("Signal received, shutting down...")
         client.disconnect()
         client.loop_stop()
@@ -10,4 +12,3 @@ def setup_signal_handlers(client):
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-
