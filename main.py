@@ -1,65 +1,93 @@
 #!/usr/bin/env python3
 
-from mqtt_client import create_mqtt_client, send_message
-from signal_handler import setup_signal_handlers
-from config import load_config
-import time
-from image import fetch, process
 import logging
-import sqlite3
+import time
+
+from database import Database
+from image import fetch, process
+from mqtt_client import create_mqtt_client, send_message
+from settings import AppSettings
+from signal_handler import setup_signal_handlers
 
 CONFIG_FILE_NAME = "config.yaml"
 
-config = load_config(CONFIG_FILE_NAME)
-log_level = config.get('log_level', 'WARNING').upper()
-logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger()
-conn = sqlite3.connect('data.db')
-cursor = conn.cursor()
-cursor.execute('''CREATE TABLE IF NOT EXISTS history (ts INTEGER, value REAL)''')
 
-def handle(uri):
+def handle(uri: str, logger: logging.Logger) -> float:
     image_bytes = fetch(uri)
+    if image_bytes is None:
+        logger.warning(f"Failed to fetch image from {uri}")
+        return 0.0
+
     value = process(image_bytes)
     logger.debug(f"Got value {value} from {uri}")
     return value
 
-def run_service():
 
+def run_service() -> None:
+    # Load configuration
+    settings = AppSettings.load(CONFIG_FILE_NAME)
+
+    # Configure logging
+    logging.basicConfig(
+        level=settings.log_level.upper(),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    logger = logging.getLogger(__name__)
+
+    # Initialize database
+    db = Database()
+
+    # Initialize MQTT client
     client = create_mqtt_client()
-    client.connect(config['mqtt']['host'], config['mqtt']['port'], 60)
+    client.connect(settings.mqtt.host, settings.mqtt.port, 60)
     client.loop_start()
 
     setup_signal_handlers(client)
 
-    interval = 60 * config['interval']
+    interval = settings.interval * 60
 
     logger.info("Service is running...")
     try:
         while True:
-            result = 0
-            for image in config['images']:
-                result += handle(image)
-            avg = round(result/len(config['images']), 2)
+            result = 0.0
+
+            for image_uri in settings.images:
+                val = handle(image_uri, logger)
+                result += val
+
+            count = len(settings.images)
+            if count > 0:
+                avg = round(result / count, 2)
+            else:
+                avg = 0.0
+
             logger.debug(f"Avg {avg}")
-            current_timestamp = int(time.time())
-            cursor.execute("INSERT INTO history (ts, value) VALUES (?, ?)", (current_timestamp, avg))
-            conn.commit()
-            delayed_ts = int(time.time()) - (22.5 * 60 * 60)
-            cursor.execute("SELECT value FROM history WHERE ts < ? ORDER BY ts DESC LIMIT 1", (delayed_ts,))
-            row = cursor.fetchone()
-            if row:
-                send_message(client, config['mqtt']['topic'] + "_delayed", round(row[0], 2), logging)
-            send_message(client, config['mqtt']['topic'], avg, logging)
+
+            # Database operations
+            db.insert_history(avg)
+
+            # Delayed value
+            delayed_value = db.get_delayed_value()
+            if delayed_value is not None:
+                send_message(
+                    client,
+                    f"{settings.mqtt.topic}_delayed",
+                    round(delayed_value, 2),
+                    logger,
+                )
+
+            # Current value
+            send_message(client, settings.mqtt.topic, avg, logger)
+
             time.sleep(interval)
+
     except KeyboardInterrupt:
         logger.warning("Service interrupted by KeyboardInterrupt")
     finally:
         client.loop_stop()
         client.disconnect()
-        conn.close()
+        db.close()
 
 
 if __name__ == "__main__":
     run_service()
-
