@@ -20,6 +20,7 @@ class SnowDepthSensorConfig(BaseModel):
     roi_y: Optional[int] = None
     roi_w: Optional[int] = None
     roi_h: Optional[int] = None
+    roi_rotation: float = 0.0 # Degrees to rotate the ROI to make the stick vertical
 
 
 class AppSettings(BaseModel):

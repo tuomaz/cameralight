@@ -61,6 +61,7 @@ def handle_snow_depth_measurement(settings: AppSettings, logger: logging.Logger)
         stick_total_cm=settings.snow_depth_sensor.stick_total_cm,
         pixels_per_cm=settings.snow_depth_sensor.pixels_per_cm,
         roi=roi,
+        roi_rotation=settings.snow_depth_sensor.roi_rotation,
     )
     return snow_depth_cm
 

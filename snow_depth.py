@@ -141,6 +141,7 @@ def measure_snow_depth(
     stick_total_cm: float,
     pixels_per_cm: float,
     roi: Optional[Tuple[int, int, int, int]] = None,
+    roi_rotation: float = 0.0,
     debug_output_path: Optional[str] = None,
 ) -> Optional[float]:
     
@@ -165,6 +166,18 @@ def measure_snow_depth(
              return None
     else:
         processed_img = img
+
+    # Handle Rotation
+    # This is useful if the stick is leaning. We rotate the ROI so the stick becomes vertical,
+    # improving the vertical edge detection and morphology.
+    if abs(roi_rotation) > 0.1:
+         logger.info(f"Rotating ROI by {roi_rotation} degrees")
+         h, w = processed_img.shape[:2]
+         center = (w // 2, h // 2)
+         # Positive angle = Counter-clockwise
+         M = cv2.getRotationMatrix2D(center, roi_rotation, 1.0)
+         # Use borderReplicate to avoid black borders affecting edge detection
+         processed_img = cv2.warpAffine(processed_img, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
 
     debug_img = processed_img.copy() if debug_output_path else None
 
