@@ -42,11 +42,25 @@ def handle_snow_depth_measurement(settings: AppSettings, logger: logging.Logger)
         logger.warning(f"Failed to fetch image from {settings.snow_depth_sensor.image_uri} for snow depth measurement.")
         return None
 
+    # Prepare ROI tuple if configured
+    roi = None
+    if (settings.snow_depth_sensor.roi_x is not None and
+        settings.snow_depth_sensor.roi_y is not None and
+        settings.snow_depth_sensor.roi_w is not None and
+        settings.snow_depth_sensor.roi_h is not None):
+        roi = (
+            settings.snow_depth_sensor.roi_x,
+            settings.snow_depth_sensor.roi_y,
+            settings.snow_depth_sensor.roi_w,
+            settings.snow_depth_sensor.roi_h
+        )
+
     snow_depth_cm = measure_snow_depth(
         image_bytes=image_bytes,
         stick_colors=settings.snow_depth_sensor.stick_colors,
         stick_total_cm=settings.snow_depth_sensor.stick_total_cm,
         pixels_per_cm=settings.snow_depth_sensor.pixels_per_cm,
+        roi=roi,
     )
     return snow_depth_cm
 

@@ -16,6 +16,10 @@ class SnowDepthSensorConfig(BaseModel):
     stick_colors: List[str] = []
     stick_total_cm: float = 0.0 # Total physical length of the stick
     pixels_per_cm: float = 0.0 # Calibration factor
+    roi_x: Optional[int] = None
+    roi_y: Optional[int] = None
+    roi_w: Optional[int] = None
+    roi_h: Optional[int] = None
 
 
 class AppSettings(BaseModel):
