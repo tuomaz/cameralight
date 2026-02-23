@@ -9,7 +9,7 @@ from image import fetch, process
 from mqtt_client import create_mqtt_client, send_message
 from settings import AppSettings
 from signal_handler import setup_signal_handlers
-from snow_depth import measure_snow_depth # New import
+from snow_depth import measure_snow_depth
 
 CONFIG_FILE_NAME = "config.yaml"
 
@@ -24,35 +24,47 @@ def handle_image_brightness(uri: str, logger: logging.Logger) -> float:
     logger.debug(f"Got brightness value {value} from {uri}")
     return value
 
-def handle_snow_depth_measurement(settings: AppSettings, logger: logging.Logger) -> Optional[float]:
+
+def handle_snow_depth_measurement(
+    settings: AppSettings, logger: logging.Logger
+) -> Optional[float]:
     if not settings.snow_depth_sensor.enabled:
         return None
-    
+
     if not settings.snow_depth_sensor.image_uri:
         logger.error("Snow depth sensor enabled but no image_uri configured.")
         return None
 
-    if not settings.snow_depth_sensor.stick_total_cm or not settings.snow_depth_sensor.pixels_per_cm:
-        logger.error("Snow depth sensor enabled but calibration data (stick_total_cm, pixels_per_cm) missing.")
+    if (
+        not settings.snow_depth_sensor.stick_total_cm
+        or not settings.snow_depth_sensor.pixels_per_cm
+    ):
+        logger.error(
+            "Snow depth sensor enabled but calibration data (stick_total_cm, pixels_per_cm) missing."
+        )
         return None
-    
+
     logger.info(f"Measuring snow depth from {settings.snow_depth_sensor.image_uri}")
     image_bytes = fetch(settings.snow_depth_sensor.image_uri)
     if image_bytes is None:
-        logger.warning(f"Failed to fetch image from {settings.snow_depth_sensor.image_uri} for snow depth measurement.")
+        logger.warning(
+            f"Failed to fetch image from {settings.snow_depth_sensor.image_uri} for snow depth measurement."
+        )
         return None
 
     # Prepare ROI tuple if configured
     roi = None
-    if (settings.snow_depth_sensor.roi_x is not None and
-        settings.snow_depth_sensor.roi_y is not None and
-        settings.snow_depth_sensor.roi_w is not None and
-        settings.snow_depth_sensor.roi_h is not None):
+    if (
+        settings.snow_depth_sensor.roi_x is not None
+        and settings.snow_depth_sensor.roi_y is not None
+        and settings.snow_depth_sensor.roi_w is not None
+        and settings.snow_depth_sensor.roi_h is not None
+    ):
         roi = (
             settings.snow_depth_sensor.roi_x,
             settings.snow_depth_sensor.roi_y,
             settings.snow_depth_sensor.roi_w,
-            settings.snow_depth_sensor.roi_h
+            settings.snow_depth_sensor.roi_h,
         )
 
     snow_depth_cm = measure_snow_depth(
@@ -87,44 +99,56 @@ def run_service() -> None:
 
     setup_signal_handlers(client)
 
-    interval = settings.interval * 60
-
     logger.info("Service is running...")
     try:
         while True:
-            # --- Brightness Measurement ---
-            result = 0.0
-            for image_uri in settings.images:
-                val = handle_image_brightness(image_uri, logger)
-                result += val
+            # --- Brightness Sensors ---
+            sensors = settings.get_sensors()
+            for sensor in sensors:
+                logger.info(f"Processing sensor: {sensor.name}")
+                total_value = 0.0
+                valid_sources = 0
 
-            count = len(settings.images)
-            if count > 0:
-                avg_brightness = round(result / count, 2)
-            else:
-                avg_brightness = 0.0
+                for image_uri in sensor.sources:
+                    val = handle_image_brightness(image_uri, logger)
+                    total_value += val
+                    valid_sources += 1
 
-            logger.debug(f"Avg Brightness: {avg_brightness}")
+                if valid_sources > 0:
+                    avg = round(total_value / valid_sources, 2)
+                else:
+                    avg = 0.0
 
-            db.insert_history(avg_brightness) # Store brightness history
+                logger.debug(f"Sensor {sensor.name} average: {avg}")
 
-            delayed_value = db.get_delayed_value()
-            if delayed_value is not None:
-                send_message(
-                    client,
-                    f"{settings.mqtt.topic}_delayed",
-                    round(delayed_value, 2),
-                    logger,
-                )
-            send_message(client, settings.mqtt.topic, avg_brightness, logger)
+                # Database operations
+                db.insert_history(sensor.name, avg)
+
+                # Current value
+                send_message(client, sensor.topic, avg, logger)
+
+                # Delayed value
+                if sensor.delayed_topic and sensor.delay_seconds:
+                    delayed_value = db.get_delayed_value(
+                        sensor.name, sensor.delay_seconds
+                    )
+                    if delayed_value is not None:
+                        send_message(
+                            client,
+                            sensor.delayed_topic,
+                            round(delayed_value, 2),
+                            logger,
+                        )
 
             # --- Snow Depth Measurement ---
             snow_depth = handle_snow_depth_measurement(settings, logger)
             if snow_depth is not None:
-                snow_depth_topic = f"{settings.mqtt.topic}_snow_depth"
+                # If legacy topic exists, use it as prefix, otherwise use a default
+                base_topic = settings.mqtt.topic or "cameralight"
+                snow_depth_topic = f"{base_topic}_snow_depth"
                 send_message(client, snow_depth_topic, snow_depth, logger)
 
-            time.sleep(interval)
+            time.sleep(settings.interval)
 
     except KeyboardInterrupt:
         logger.warning("Service interrupted by KeyboardInterrupt")
