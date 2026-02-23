@@ -38,6 +38,25 @@ sensors:
     # No delay configured for this one
 ```
 
+## MQTT Topic Structure
+To ensure discoverability and prevent message collisions, topics should follow a hierarchical pattern.
+
+### Recommended Pattern
+`{prefix}/{sensor_name}/{measurement_type}`
+
+*   **Prefix:** Default is `cameralight`.
+*   **Sensor Name:** The unique name defined in the config.
+*   **Measurement Type:** `brightness` for real-time or `brightness_delayed` for history-based values.
+
+### Example
+| Sensor | Type | Topic |
+| :--- | :--- | :--- |
+| `indoor` | Real-time | `cameralight/indoor/brightness` |
+| `indoor` | Delayed | `cameralight/indoor/brightness_delayed` |
+| `outdoor` | Real-time | `cameralight/outdoor/brightness` |
+
+This structure allows for powerful wildcard subscriptions, such as `cameralight/+/brightness` to monitor all sensors simultaneously.
+
 ## Technical Design
 
 ### 1. Data Model
