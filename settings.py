@@ -19,12 +19,26 @@ class SensorConfig(BaseModel):
     delayed_topic: Optional[str] = None
 
 
+class SnowDepthSensorConfig(BaseModel):
+    enabled: bool = False
+    image_uri: Optional[str] = None
+    stick_colors: List[str] = []
+    stick_total_cm: float = 0.0  # Total physical length of the stick
+    pixels_per_cm: float = 0.0  # Calibration factor
+    roi_x: Optional[int] = None
+    roi_y: Optional[int] = None
+    roi_w: Optional[int] = None
+    roi_h: Optional[int] = None
+    roi_rotation: float = 0.0  # Degrees to rotate the ROI to make the stick vertical
+
+
 class AppSettings(BaseModel):
     log_level: str = "WARNING"
     interval: int = 60
     images: Optional[List[str]] = None
     mqtt: MqttConfig
     sensors: Optional[List[SensorConfig]] = None
+    snow_depth_sensor: SnowDepthSensorConfig = SnowDepthSensorConfig()
 
     @model_validator(mode="after")
     def check_at_least_one_sensor_source(self) -> "AppSettings":
