@@ -49,37 +49,44 @@ def run_service() -> None:
     logger.info("Service is running...")
     try:
         while True:
-            result = 0.0
+            sensors = settings.get_sensors()
+            for sensor in sensors:
+                logger.info(f"Processing sensor: {sensor.name}")
+                total_value = 0.0
+                valid_sources = 0
 
-            for image_uri in settings.images:
-                val = handle(image_uri, logger)
-                result += val
+                for image_uri in sensor.sources:
+                    val = handle(image_uri, logger)
+                    total_value += val
+                    valid_sources += 1
 
-            count = len(settings.images)
-            if count > 0:
-                avg = round(result / count, 2)
-            else:
-                avg = 0.0
+                if valid_sources > 0:
+                    avg = round(total_value / valid_sources, 2)
+                else:
+                    avg = 0.0
 
-            logger.debug(f"Avg {avg}")
+                logger.debug(f"Sensor {sensor.name} average: {avg}")
 
-            # Database operations
-            db.insert_history(avg)
+                # Database operations
+                db.insert_history(sensor.name, avg)
 
-            # Delayed value
-            delayed_value = db.get_delayed_value()
-            if delayed_value is not None:
-                send_message(
-                    client,
-                    f"{settings.mqtt.topic}_delayed",
-                    round(delayed_value, 2),
-                    logger,
-                )
+                # Current value
+                send_message(client, sensor.topic, avg, logger)
 
-            # Current value
-            send_message(client, settings.mqtt.topic, avg, logger)
+                # Delayed value
+                if sensor.delayed_topic and sensor.delay_seconds:
+                    delayed_value = db.get_delayed_value(
+                        sensor.name, sensor.delay_seconds
+                    )
+                    if delayed_value is not None:
+                        send_message(
+                            client,
+                            sensor.delayed_topic,
+                            round(delayed_value, 2),
+                            logger,
+                        )
 
-            time.sleep(interval)
+            time.sleep(settings.interval)
 
     except KeyboardInterrupt:
         logger.warning("Service interrupted by KeyboardInterrupt")
