@@ -74,6 +74,7 @@ def handle_snow_depth_measurement(
         pixels_per_cm=settings.snow_depth_sensor.pixels_per_cm,
         roi=roi,
         roi_rotation=settings.snow_depth_sensor.roi_rotation,
+        marker_interval_cm=settings.snow_depth_sensor.marker_interval_cm,
     )
     return snow_depth_cm
 
@@ -143,10 +144,15 @@ def run_service() -> None:
             # --- Snow Depth Measurement ---
             snow_depth = handle_snow_depth_measurement(settings, logger)
             if snow_depth is not None:
-                # If legacy topic exists, use it as prefix, otherwise use a default
+                db.insert_history("snow_depth", snow_depth)
+                smoothed_depth = (
+                    db.get_recent_median("snow_depth", limit=5) or snow_depth
+                )
                 base_topic = settings.mqtt.topic or "cameralight"
-                snow_depth_topic = f"{base_topic}_snow_depth"
-                send_message(client, snow_depth_topic, snow_depth, logger)
+                snow_depth_topic = (
+                    settings.snow_depth_sensor.topic or f"{base_topic}_snow_depth"
+                )
+                send_message(client, snow_depth_topic, smoothed_depth, logger)
 
             time.sleep(settings.interval)
 

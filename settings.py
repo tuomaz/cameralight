@@ -22,9 +22,11 @@ class SensorConfig(BaseModel):
 class SnowDepthSensorConfig(BaseModel):
     enabled: bool = False
     image_uri: Optional[str] = None
+    topic: Optional[str] = None
     stick_colors: List[str] = []
     stick_total_cm: float = 0.0  # Total physical length of the stick
     pixels_per_cm: float = 0.0  # Calibration factor
+    marker_interval_cm: Optional[float] = None  # Distance between reflective markers
     roi_x: Optional[int] = None
     roi_y: Optional[int] = None
     roi_w: Optional[int] = None

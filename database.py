@@ -1,4 +1,5 @@
 import sqlite3
+import statistics
 import time
 from typing import Optional
 
@@ -52,6 +53,21 @@ class Database:
         if row:
             return row[0]
         return None
+
+    def get_recent_median(
+        self, sensor_name: str, limit: int = 5
+    ) -> Optional[float]:
+        if not self.conn:
+            raise ConnectionError("Database not connected")
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT value FROM history WHERE sensor_name = ? ORDER BY ts DESC LIMIT ?",
+            (sensor_name, limit),
+        )
+        rows = [r[0] for r in cursor.fetchall() if r[0] is not None]
+        if not rows:
+            return None
+        return round(float(statistics.median(rows)), 2)
 
     def close(self) -> None:
         if self.conn:
