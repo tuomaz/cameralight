@@ -2,4 +2,4 @@ config.yaml
 env
 data.db
 __pycache__
-config.yaml
+captured_snow_images/
