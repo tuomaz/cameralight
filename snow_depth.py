@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -247,6 +247,10 @@ def _detect_markers_along_line(
     return peaks
 
 
+# Cache of observed un-occluded top endpoint y-coordinate per ROI (h, w)
+_calibrated_top_y: Dict[Tuple[int, int], int] = {}
+
+
 def _fit_stick_line_and_measure(
     img: np.ndarray,
     resp: np.ndarray,
@@ -275,7 +279,8 @@ def _fit_stick_line_and_measure(
             prof = np.maximum(
                 resp[ys, xs - 1], np.maximum(resp[ys, xs], resp[ys, xs + 1])
             )
-            score = float(np.sum(np.minimum(prof, 25.0)))
+            # Slight regularization on |dx| breaks ties toward vertical when part of the ROI is obscured
+            score = float(np.sum(np.minimum(prof, 25.0))) - 0.05 * abs(dx)
             if score > best_score:
                 best_score = score
                 best_line = (x_top, x_bot)
@@ -290,7 +295,12 @@ def _fit_stick_line_and_measure(
     q75 = float(np.percentile(prof, 75))
     min_q75 = 12.0 if is_ir else 15.0
     if q75 < min_q75:
-        return None, []
+        # Check if a strong partial segment (>= 25 px) exists despite upper-lens occlusion
+        top_k_mean = float(np.mean(np.sort(prof)[-min(25, h) :]))
+        if top_k_mean >= (22.0 if is_ir else 30.0):
+            q75 = top_k_mean
+        else:
+            return None, []
 
     thresh = float(np.clip(0.18 * q75, 7.5 if is_ir else 10.0, 18.0))
     cleaned = _clean_1d_mask(prof >= thresh, close_gap=12, min_len=8)
@@ -299,13 +309,40 @@ def _fit_stick_line_and_measure(
         return None, []
 
     y1, y2 = int(active_ys[0]), int(active_ys[-1])
-    if y1 > max(35, int(h * 0.25)):
-        return None, []
+    upper_occluded = False
+    max_normal_y1 = max(35, int(h * 0.25))
+    if y1 > max_normal_y1:
+        # Upper stick is obscured (e.g. water drop on upper lens). Verify if the lower visible
+        # segment is a high-confidence vertical stick with a clear snow termination at y2.
+        seg_median = float(np.median(prof[active_ys]))
+        min_seg_median = 22.0 if is_ir else 30.0
+        peak_xs = np.argmax(resp[active_ys], axis=1)
+        if (
+            seg_median >= min_seg_median
+            and y2 >= int(h * 0.55)
+            and float(np.std(peak_xs)) <= 3.5
+        ):
+            upper_occluded = True
+            x_med = int(round(float(np.median(peak_xs))))
+            x_top, x_bot, dx = x_med, x_med, 0
+            xs = np.full(h, np.clip(x_med, 2, w - 3), dtype=int)
+        else:
+            return None, []
 
     peaks = _detect_markers_along_line(img, xs, y1, y2)
-    # Snap top endpoint to the top reflective marker cap if present near y1
-    if peaks and abs(peaks[0][0] - y1) <= 8 and peaks[0][1] > 40.0:
-        y1 = peaks[0][0]
+    if upper_occluded:
+        top_ref = _calibrated_top_y.get((h, w), max(0, int(round(h * 0.05))))
+        logger.info(
+            f"Upper stick obscured (visible y={y1}..{y2}); anchoring top endpoint to y={top_ref}"
+        )
+        y1 = top_ref
+    else:
+        # Snap top endpoint to the top reflective marker cap if present near y1
+        if peaks and abs(peaks[0][0] - y1) <= 8 and peaks[0][1] > 40.0:
+            y1 = peaks[0][0]
+        if y1 <= 25:
+            _calibrated_top_y[(h, w)] = y1
+
     # Snap bottom endpoint to the bottom reflective marker if present just below y2
     if peaks and 0 < (peaks[-1][0] - y2) <= 8 and peaks[-1][1] > 35.0:
         y2 = peaks[-1][0]
