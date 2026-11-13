@@ -309,6 +309,22 @@ def _fit_stick_line_and_measure(
         return None, []
 
     y1, y2 = int(active_ys[0]), int(active_ys[-1])
+
+    # Reject blurry/foggy lower-lens occlusions where the stick fades out gradually
+    # instead of terminating sharply at the snow surface.
+    tail = prof[y2 + 1 : min(h, y2 + 26)]
+    dim_tail = int(np.sum((tail >= 2.0) & (tail < thresh)))
+    above_10 = float(np.mean(prof[max(y1, y2 - 10) : y2])) if y2 > y1 else 0.0
+    if dim_tail >= 13 or (
+        y2 < int(h * 0.70)
+        and (above_10 < (15.0 if is_ir else 25.0) or dim_tail >= 10)
+    ):
+        logger.info(
+            f"Lower stick boundary obscured/blurry at y={y2} "
+            f"(above10={above_10:.1f}, dim_tail={dim_tail}); rejecting frame."
+        )
+        return None, []
+
     upper_occluded = False
     max_normal_y1 = max(35, int(h * 0.25))
     if y1 > max_normal_y1:
