@@ -269,6 +269,7 @@ def _fit_stick_line_and_measure(
     max_dx = min(40, w - 10)
     best_score = -1.0
     best_line = (w // 2, w // 2)
+    cap = 50.0 if is_ir else 80.0
 
     for x_top in range(4, w - 4):
         for dx in range(-max_dx, max_dx + 1):
@@ -280,7 +281,7 @@ def _fit_stick_line_and_measure(
                 resp[ys, xs - 1], np.maximum(resp[ys, xs], resp[ys, xs + 1])
             )
             # Slight regularization on |dx| breaks ties toward vertical when part of the ROI is obscured
-            score = float(np.sum(np.minimum(prof, 25.0))) - 0.05 * abs(dx)
+            score = float(np.sum(np.minimum(prof, cap))) - 0.1 * abs(dx)
             if score > best_score:
                 best_score = score
                 best_line = (x_top, x_bot)
@@ -303,7 +304,7 @@ def _fit_stick_line_and_measure(
             return None, []
 
     thresh = float(np.clip(0.18 * q75, 7.5 if is_ir else 10.0, 18.0))
-    cleaned = _clean_1d_mask(prof >= thresh, close_gap=12, min_len=8)
+    cleaned = _clean_1d_mask(prof >= thresh, close_gap=5, min_len=10)
     active_ys = np.where(cleaned)[0]
     if len(active_ys) < 25:
         return None, []
