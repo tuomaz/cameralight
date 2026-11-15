@@ -231,7 +231,7 @@ def _detect_markers_along_line(
     for offset in (-2, -1, 0, 1, 2):
         marker_prof = np.maximum(marker_prof, bright_narrow[ys, xs_c + offset])
 
-    search_top = max(2, y1 - 8)
+    search_top = max(6, y1 - 6)
     search_bot = min(h - 2, y2 + 4)
     peaks: List[Tuple[int, float]] = []
     for y_idx in range(search_top, search_bot):
@@ -269,7 +269,7 @@ def _fit_stick_line_and_measure(
     max_dx = min(40, w - 10)
     best_score = -1.0
     best_line = (w // 2, w // 2)
-    cap = 50.0 if is_ir else 80.0
+    cap = 50.0 if is_ir else 110.0
 
     for x_top in range(4, w - 4):
         for dx in range(-max_dx, max_dx + 1):
@@ -278,7 +278,7 @@ def _fit_stick_line_and_measure(
                 continue
             xs = np.round(x_top + (dx * ys) / (h - 1)).astype(int)
             prof = np.maximum(
-                resp[ys, xs - 1], np.maximum(resp[ys, xs], resp[ys, xs + 1])
+                resp[ys, xs], 0.85 * np.maximum(resp[ys, xs - 1], resp[ys, xs + 1])
             )
             # Slight regularization on |dx| breaks ties toward vertical when part of the ROI is obscured
             score = float(np.sum(np.minimum(prof, cap))) - 0.1 * abs(dx)
@@ -303,7 +303,7 @@ def _fit_stick_line_and_measure(
         else:
             return None, []
 
-    thresh = float(np.clip(0.18 * q75, 7.5 if is_ir else 10.0, 18.0))
+    thresh = float(np.clip(0.18 * q75, 7.5 if is_ir else 10.0, 18.0 if is_ir else 30.0))
     cleaned = _clean_1d_mask(prof >= thresh, close_gap=5, min_len=10)
     active_ys = np.where(cleaned)[0]
     if len(active_ys) < 25:
@@ -313,9 +313,10 @@ def _fit_stick_line_and_measure(
 
     # Reject blurry/foggy lower-lens occlusions where the stick fades out gradually
     # instead of terminating sharply at the snow surface.
-    tail = prof[y2 + 1 : min(h, y2 + 26)]
-    dim_tail = int(np.sum((tail >= 2.0) & (tail < thresh)))
     above_10 = float(np.mean(prof[max(y1, y2 - 10) : y2])) if y2 > y1 else 0.0
+    tail = prof[y2 + 1 : min(h, y2 + 26)]
+    tail_min = max(2.0, 0.12 * above_10)
+    dim_tail = int(np.sum((tail >= tail_min) & (tail < thresh)))
     if dim_tail >= 13 or (
         y2 < int(h * 0.70)
         and (above_10 < (15.0 if is_ir else 25.0) or dim_tail >= 10)
@@ -354,10 +355,18 @@ def _fit_stick_line_and_measure(
         )
         y1 = top_ref
     else:
-        # Snap top endpoint to the top reflective marker cap if present near y1
-        if peaks and abs(peaks[0][0] - y1) <= 8 and peaks[0][1] > 40.0:
+        # Snap top endpoint to the top reflective marker cap if present near the top of the ROI
+        if (
+            peaks
+            and 6 <= peaks[0][0] <= 18
+            and abs(peaks[0][0] - y1) <= 15
+            and peaks[0][1] > 40.0
+        ):
             y1 = peaks[0][0]
-        if y1 <= 25:
+            _calibrated_top_y[(h, w)] = y1
+        elif (h, w) in _calibrated_top_y and y1 < _calibrated_top_y[(h, w)] - 1:
+            y1 = _calibrated_top_y[(h, w)]
+        elif 6 <= y1 <= 20:
             _calibrated_top_y[(h, w)] = y1
 
     # Snap bottom endpoint to the bottom reflective marker if present just below y2
