@@ -231,14 +231,22 @@ def _detect_markers_along_line(
     for offset in (-2, -1, 0, 1, 2):
         marker_prof = np.maximum(marker_prof, bright_narrow[ys, xs_c + offset])
 
-    search_top = max(6, y1 - 6)
+    search_top = max(7, y1 - 6)
     search_bot = min(h - 2, y2 + 4)
     peaks: List[Tuple[int, float]] = []
     for y_idx in range(search_top, search_bot):
         val = float(marker_prof[y_idx])
-        win_start = max(search_top, y_idx - 8)
-        win_end = min(search_bot, y_idx + 9)
-        if val > 25.0 and val >= float(np.max(marker_prof[win_start:win_end])):
+        win_start = max(2, y_idx - 8)
+        win_end = min(h - 2, y_idx + 9)
+        local_drop = max(
+            float(np.min(marker_prof[max(0, y_idx - 5) : y_idx + 1])),
+            float(np.min(marker_prof[y_idx : min(h, y_idx + 6)])),
+        )
+        if (
+            val > 25.0
+            and local_drop < 0.85 * val
+            and val >= float(np.max(marker_prof[win_start:win_end]))
+        ):
             if not peaks or (y_idx - peaks[-1][0]) >= 18:
                 peaks.append((y_idx, val))
             elif val > peaks[-1][1]:
@@ -303,7 +311,15 @@ def _fit_stick_line_and_measure(
         else:
             return None, []
 
-    thresh = float(np.clip(0.18 * q75, 7.5 if is_ir else 10.0, 18.0 if is_ir else 30.0))
+    q75_ref = q75
+    if is_ir and h >= 60:
+        q75_lower = float(np.percentile(prof[h // 3 :], 75))
+        if q75_lower >= min_q75:
+            q75_ref = min(q75, q75_lower)
+
+    thresh = float(
+        np.clip(0.18 * q75_ref, 7.5 if is_ir else 10.0, 25.0 if is_ir else 30.0)
+    )
     cleaned = _clean_1d_mask(prof >= thresh, close_gap=5, min_len=10)
     active_ys = np.where(cleaned)[0]
     if len(active_ys) < 25:
@@ -358,16 +374,19 @@ def _fit_stick_line_and_measure(
         # Snap top endpoint to the top reflective marker cap if present near the top of the ROI
         if (
             peaks
-            and 6 <= peaks[0][0] <= 18
-            and abs(peaks[0][0] - y1) <= 15
+            and 8 <= peaks[0][0] <= 10
+            and abs(peaks[0][0] - y1) <= 12
             and peaks[0][1] > 40.0
         ):
             y1 = peaks[0][0]
             _calibrated_top_y[(h, w)] = y1
-        elif (h, w) in _calibrated_top_y and y1 < _calibrated_top_y[(h, w)] - 1:
-            y1 = _calibrated_top_y[(h, w)]
-        elif 6 <= y1 <= 20:
-            _calibrated_top_y[(h, w)] = y1
+        elif 8 <= y1 <= 10:
+            if (h, w) in _calibrated_top_y and y1 < _calibrated_top_y[(h, w)] - 1:
+                y1 = _calibrated_top_y[(h, w)]
+            else:
+                _calibrated_top_y[(h, w)] = y1
+        else:
+            y1 = _calibrated_top_y.get((h, w), max(8, int(round(h * 0.05))))
 
     # Snap bottom endpoint to the bottom reflective marker if present just below y2
     if peaks and 0 < (peaks[-1][0] - y2) <= 8 and peaks[-1][1] > 35.0:
