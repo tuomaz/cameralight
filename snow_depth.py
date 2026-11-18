@@ -363,7 +363,17 @@ def _fit_stick_line_and_measure(
         else:
             return None, []
 
-    peaks = _detect_markers_along_line(img, xs, y1, y2)
+    peaks_all = _detect_markers_along_line(img, xs, y1, h - 6)
+    for idx_p in range(1, len(peaks_all)):
+        py, pval = peaks_all[idx_p]
+        prev_py = peaks_all[idx_p - 1][0]
+        if py > y2 + 8 and pval > 45.0 and 20 <= (py - prev_py) <= 34:
+            logger.info(
+                f"Stick body faded out at y={y2} above visible marker at y={py}; rejecting frame."
+            )
+            return None, []
+
+    peaks = [p for p in peaks_all if p[0] <= y2 + 8]
     if upper_occluded:
         top_ref = _calibrated_top_y.get((h, w), max(0, int(round(h * 0.05))))
         logger.info(

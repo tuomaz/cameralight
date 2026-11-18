@@ -101,6 +101,7 @@ def run_service() -> None:
     setup_signal_handlers(client)
 
     logger.info("Service is running...")
+    outlier_streak = 0
     try:
         while True:
             # --- Brightness Sensors ---
@@ -144,9 +145,28 @@ def run_service() -> None:
             # --- Snow Depth Measurement ---
             snow_depth = handle_snow_depth_measurement(settings, logger)
             if snow_depth is not None:
+                baseline = db.get_recent_median("snow_depth", limit=15)
+                if baseline is not None and abs(snow_depth - baseline) > 8.0:
+                    outlier_streak += 1
+                    if outlier_streak < 5:
+                        logger.warning(
+                            f"Ignoring transient snow depth outlier {snow_depth}cm "
+                            f"(baseline={baseline}cm, streak={outlier_streak}/5)"
+                        )
+                        snow_depth = None
+                    else:
+                        logger.info(
+                            f"Accepting sustained snow depth shift to {snow_depth}cm "
+                            f"(was {baseline}cm)"
+                        )
+                        outlier_streak = 0
+                else:
+                    outlier_streak = 0
+
+            if snow_depth is not None:
                 db.insert_history("snow_depth", snow_depth)
                 smoothed_depth = (
-                    db.get_recent_median("snow_depth", limit=5) or snow_depth
+                    db.get_recent_median("snow_depth", limit=7) or snow_depth
                 )
                 base_topic = settings.mqtt.topic or "cameralight"
                 snow_depth_topic = (
