@@ -32,6 +32,7 @@ class SnowDepthSensorConfig(BaseModel):
     roi_w: Optional[int] = None
     roi_h: Optional[int] = None
     roi_rotation: float = 0.0  # Degrees to rotate the ROI to make the stick vertical
+    smoothing_window: int = 35  # Number of recent samples for Interquartile Mean smoothing
 
 
 class AppSettings(BaseModel):

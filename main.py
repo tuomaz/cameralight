@@ -143,9 +143,10 @@ def run_service() -> None:
                         )
 
             # --- Snow Depth Measurement ---
+            window = max(4, settings.snow_depth_sensor.smoothing_window)
             snow_depth = handle_snow_depth_measurement(settings, logger)
             if snow_depth is not None:
-                baseline = db.get_recent_median("snow_depth", limit=15)
+                baseline = db.get_recent_iqm("snow_depth", limit=window)
                 if baseline is not None and abs(snow_depth - baseline) > 8.0:
                     outlier_streak += 1
                     if outlier_streak < 5:
@@ -166,7 +167,8 @@ def run_service() -> None:
             if snow_depth is not None:
                 db.insert_history("snow_depth", snow_depth)
                 smoothed_depth = (
-                    db.get_recent_median("snow_depth", limit=7) or snow_depth
+                    db.get_recent_iqm("snow_depth", limit=window)
+                    or round(snow_depth, 1)
                 )
                 base_topic = settings.mqtt.topic or "cameralight"
                 snow_depth_topic = (
