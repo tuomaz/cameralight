@@ -69,6 +69,27 @@ class Database:
             return None
         return round(float(statistics.median(rows)), 2)
 
+    def get_recent_iqm(
+        self, sensor_name: str, limit: int = 35
+    ) -> Optional[float]:
+        """Compute the Interquartile Mean (trimmed mean of middle 50%) of the last `limit` samples."""
+        if not self.conn:
+            raise ConnectionError("Database not connected")
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT value FROM history WHERE sensor_name = ? ORDER BY ts DESC LIMIT ?",
+            (sensor_name, limit),
+        )
+        rows = sorted(r[0] for r in cursor.fetchall() if r[0] is not None)
+        if not rows:
+            return None
+        n = len(rows)
+        if n < 4:
+            return round(float(statistics.median(rows)), 1)
+        trim = n // 4
+        core = rows[trim : n - trim]
+        return round(float(sum(core) / len(core)), 1)
+
     def close(self) -> None:
         if self.conn:
             self.conn.close()
