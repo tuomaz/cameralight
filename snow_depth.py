@@ -165,7 +165,9 @@ def _compute_color_ridge_response(
     return chroma_ridge * 1.5 + dark_ridge * gate
 
 
-def _compute_ir_ridge_response(img: np.ndarray) -> np.ndarray:
+def _compute_ir_ridge_response(
+    img: np.ndarray, allow_dark_ridge: bool = True
+) -> np.ndarray:
     """
     Compute horizontal ridge contrast for an IR-illuminated snow stick at night.
     Detects thin bright ridges while rejecting wide lens-flare gradients.
@@ -191,13 +193,23 @@ def _compute_ir_ridge_response(img: np.ndarray) -> np.ndarray:
 
     bright_ridge = np.clip(0.5 * ((gray - left_bg) + (gray - right_bg)), 0.0, None)
     not_ramp = np.minimum(gray - left_bg + 2.0, gray - right_bg + 2.0) > 0
+    res = bright_ridge * not_ramp
+    if not allow_dark_ridge:
+        return res
 
-    # Also detect narrow dark stick segments against uniform bright white snow (e.g. near the base)
+    # Also detect narrow dark stick segments against uniform moderate-bright white snow
+    # (75..165) in the lower 2/3 of the ROI, while suppressing high-gain (>165) snow ripples.
     dark_ridge = np.clip(np.minimum(left_bg - gray, right_bg - gray), 0.0, None)
-    snow_bg_gate = np.clip(
-        (np.minimum(left_bg, right_bg) - 75.0) / 15.0, 0.0, 1.0
-    ) * np.clip(1.0 - np.abs(left_bg - right_bg) / 15.0, 0.0, 1.0)
-    return np.maximum(bright_ridge * not_ramp, dark_ridge * 1.5 * snow_bg_gate)
+    min_bg = np.minimum(left_bg, right_bg)
+    snow_bg_gate = (
+        np.clip((min_bg - 75.0) / 15.0, 0.0, 1.0)
+        * np.clip((165.0 - min_bg) / 15.0, 0.0, 1.0)
+        * np.clip(1.0 - np.abs(left_bg - right_bg) / 15.0, 0.0, 1.0)
+    )
+    h = gray.shape[0]
+    if h >= 30:
+        snow_bg_gate[: h // 3, :] = 0.0
+    return np.maximum(res, dark_ridge * 1.5 * snow_bg_gate)
 
 
 def _detect_markers_along_line(
@@ -581,7 +593,9 @@ def measure_snow_depth(
             logger.info(
                 "Color detection low-confidence. Attempting Night Mode fallback..."
             )
-            resp_ir = _compute_ir_ridge_response(processed_img)
+            resp_ir = _compute_ir_ridge_response(
+                processed_img, allow_dark_ridge=False
+            )
             detected_height, marker_dists_px = _fit_stick_line_and_measure(
                 processed_img, resp_ir, is_ir=True, debug_img=debug_img
             )
