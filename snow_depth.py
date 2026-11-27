@@ -191,7 +191,13 @@ def _compute_ir_ridge_response(img: np.ndarray) -> np.ndarray:
 
     bright_ridge = np.clip(0.5 * ((gray - left_bg) + (gray - right_bg)), 0.0, None)
     not_ramp = np.minimum(gray - left_bg + 2.0, gray - right_bg + 2.0) > 0
-    return bright_ridge * not_ramp
+
+    # Also detect narrow dark stick segments against uniform bright white snow (e.g. near the base)
+    dark_ridge = np.clip(np.minimum(left_bg - gray, right_bg - gray), 0.0, None)
+    snow_bg_gate = np.clip(
+        (np.minimum(left_bg, right_bg) - 75.0) / 15.0, 0.0, 1.0
+    ) * np.clip(1.0 - np.abs(left_bg - right_bg) / 15.0, 0.0, 1.0)
+    return np.maximum(bright_ridge * not_ramp, dark_ridge * 1.5 * snow_bg_gate)
 
 
 def _detect_markers_along_line(
